@@ -1,10 +1,9 @@
-"""Builds the StocklaneOS card and the contribution graph in the night-sky style.
+"""Builds the StocklaneOS card and the languages / commit-hours panel in the night-sky style.
 
 Reuses the sky, stars, fonts and panel from assets/card-peniko*.svg.
-Usage: gh api graphql -f query='...' > scripts/.calendar.json && python scripts/make_assets.py
+Usage: put language shares and commit hours in scripts/.stats.json, then python scripts/make_assets.py
 """
 import json, re, pathlib
-from datetime import date
 
 root = pathlib.Path(__file__).resolve().parent.parent
 assets = root / "assets"
@@ -73,51 +72,42 @@ def stocklane(suffix):
     return head(suffix) + "".join(body)
 
 
-def graph(suffix, cal):
+def insights(suffix, st):
     p = PAL[suffix]
-    weeks = cal["weeks"]
-    counts = [d["contributionCount"] for w in weeks for d in w["contributionDays"]]
-    top = max(counts)
-    def level(n):
-        if n == 0: return 0
-        q = n / top
-        return 1 if q <= .25 else 2 if q <= .5 else 3 if q <= .75 else 4
-    cell, gap = 13, 3
-    x0, y0 = 76, 70
-    out = [
-        f'<text x="76" y="44" class="m" font-size="13" fill="{p["accent"]}">$ git log --since="1 year ago" '
-        f'<tspan fill="{p["mute"]}">--graph</tspan></text>',
-        f'<text x="924" y="44" text-anchor="end" class="m" font-weight="700" font-size="13" fill="{p["title"]}">'
-        f'{cal["totalContributions"]} <tspan font-weight="400" fill="{p["mute"]}">contributions</tspan></text>',
-        '<g shape-rendering="crispEdges">',
-    ]
-    last_month = None
-    months = []
-    for wi, w in enumerate(weeks):
-        for d in w["contributionDays"]:
-            y = y0 + d["weekday"] * (cell + gap)
-            x = x0 + wi * (cell + gap)
-            lv = level(d["contributionCount"])
-            tw = ' class="tw" style="animation-delay:%.1fs"' % ((wi * 7 + d["weekday"]) % 13 * 0.3) if lv == 4 else ""
-            out.append(f'<rect x="{x}" y="{y}" width="{cell}" height="{cell}" rx="2" fill="{p["levels"][lv]}"{tw}/>')
-        m = date.fromisoformat(w["contributionDays"][0]["date"]).strftime("%b")
-        if m != last_month and wi < len(weeks) - 2:
-            months.append((x0 + wi * (cell + gap), m))
-        last_month = m
+    langs = [(k, v) for k, v in st["langs"] if v >= 1][:6]
+    hours = {int(k): v for k, v in st["hours"].items()}
+    out = [f'<text x="76" y="44" class="m" font-size="13" fill="{p["accent"]}">$ top languages '
+           f'<tspan fill="{p["mute"]}">--by-project</tspan></text>']
+    top = langs[0][1]
+    for i, (name, pct) in enumerate(langs):
+        y = 74 + i * 24
+        w = max(4, round(pct / top * 210))
+        out.append(f'<text x="76" y="{y}" class="m" font-size="12.5" fill="{p["title"]}">{name}</text>')
+        out.append(f'<rect x="170" y="{y - 11}" width="210" height="12" rx="3" fill="{p["levels"][0]}"/>')
+        out.append(f'<rect x="170" y="{y - 11}" width="{w}" height="12" rx="3" fill="{p["levels"][4 if i == 0 else 3]}"/>')
+        out.append(f'<text x="392" y="{y}" class="m" font-size="12" fill="{p["mute"]}">{pct:.0f}%</text>')
+    peak = max(hours, key=hours.get)
+    h12 = (peak % 12) or 12
+    out.append(f'<text x="540" y="44" class="m" font-size="13" fill="{p["accent"]}">$ commits <tspan fill="{p["mute"]}">--by-hour</tspan></text>')
+    out.append(f'<text x="924" y="44" text-anchor="end" class="m" font-size="13" fill="{p["mute"]}">peak <tspan font-weight="700" fill="{p["title"]}">{h12}{"am" if peak < 12 else "pm"}</tspan></text>')
+    mx, base, bw, step = max(hours.values()), 166, 11, 16
+    out.append('<g shape-rendering="crispEdges">')
+    for h in range(24):
+        n = hours.get(h, 0)
+        ht = max(3, round(n / mx * 100)) if n else 3
+        col = p["levels"][4] if h == peak else p["levels"][3] if n / mx > .5 else p["levels"][2] if n else p["levels"][0]
+        tw = ""
+        out.append(f'<rect x="{540 + h * step}" y="{base - ht}" width="{bw}" height="{ht}" rx="2" fill="{col}"{tw}/>')
     out.append("</g>")
-    for x, m in months:
-        out.append(f'<text x="{x}" y="{y0 + 7 * (cell + gap) + 14}" class="m" font-size="10.5" fill="{p["mute"]}">{m.lower()}</text>')
-    lx = 640
-    out.append(f'<text x="{lx - 8}" y="44" text-anchor="end" class="m" font-size="10.5" fill="{p["mute"]}">quiet</text>')
-    for i, c in enumerate(p["levels"]):
-        out.append(f'<rect x="{lx + i * 16}" y="33" width="12" height="12" rx="2" fill="{c}"/>')
-    out.append(f'<text x="{lx + 5 * 16 + 4}" y="44" class="m" font-size="10.5" fill="{p["mute"]}">busy</text>')
+    for h, lab in ((0, "12a"), (6, "6a"), (12, "12p"), (18, "6p"), (23, "11p")):
+        out.append(f'<text x="{540 + h * step + 5}" y="{base + 16}" text-anchor="middle" class="m" font-size="10.5" fill="{p["mute"]}">{lab}</text>')
+    out.append(f'<text x="540" y="208" class="m" font-size="10.5" fill="{p["mute"]}">{sum(hours.values())} commits across my repos, local time</text>')
     out.append("</svg>")
     return head(suffix) + "".join(out)
 
 
-cal = json.loads((root / "scripts" / ".calendar.json").read_text())["data"]["user"]["contributionsCollection"]["contributionCalendar"]
+st = json.loads((root / "scripts" / ".stats.json").read_text())
 for suf in PAL:
     (assets / f"card-stocklaneos{suf}.svg").write_text(stocklane(suf), encoding="utf8")
-    (assets / f"graph-contributions{suf}.svg").write_text(graph(suf, cal), encoding="utf8")
+    (assets / f"insights{suf}.svg").write_text(insights(suf, st), encoding="utf8")
 print("ok")
