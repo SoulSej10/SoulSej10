@@ -68,8 +68,7 @@ def stocklane(suffix):
         body.append(f'<g shape-rendering="crispEdges">{px(x - 14, 163, p["box"], 8)}</g>')
         body.append(f'<text x="{x}" y="171" class="m" font-size="13.5" fill="{p["title"]}">{a} '
                     f'<tspan fill="{p["mute"]}">- {b}</tspan></text>')
-    body.append(f'<text x="232" y="200" class="m" font-size="13" fill="{p["accent"]}">$ stack '
-                f'<tspan fill="{p["mute"]}">react . typescript . .net 10 . postgresql</tspan>'
+    body.append(f'<text x="232" y="200" class="m" font-size="13" fill="{p["accent"]}">-&gt; visit peniko.vercel.app/stocklaneos'
                 f'<tspan class="blink">_</tspan></text></svg>')
     return head(suffix) + "".join(body)
 
